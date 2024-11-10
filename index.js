@@ -9,7 +9,7 @@
 'use strict';
 
 const OpenAPIToHar = require('./openapi-to-har.js');
-const HTTPSnippet = require('httpsnippet');
+const {HTTPSnippet, availableTargets} = require('httpsnippet');
 
 /**
  * Return snippets for endpoint identified using path and method in the given
@@ -21,14 +21,15 @@ const HTTPSnippet = require('httpsnippet');
  * @param {array} targets   List of languages to create snippets in, e.g,
  *                          ['cURL', 'Node']
  * @param {object} values   Optional: Values for the query parameters if present
+ * @param {string} baseUrl  Optional: Base URL to prepend to the path
  */
-const getEndpointSnippets = function (openApi, path, method, targets, values) {
+const getEndpointSnippets = function (openApi, path, method, targets, values, baseUrl) {
   // if optional parameter is not provided, set it to empty object
   if (typeof values === 'undefined') {
     values = {};
   }
 
-  const hars = OpenAPIToHar.getEndpoint(openApi, path, method, values);
+  const hars = OpenAPIToHar.getEndpoint(openApi, path, method, values, baseUrl);
 
   const snippets = [];
   for (const har of hars) {
@@ -147,7 +148,7 @@ const formatTarget = function (targetStr) {
   const title = capitalizeFirstLetter(language);
   let library = targetStr.split('_')[1];
 
-  const validTargets = HTTPSnippet.availableTargets();
+  const validTargets = availableTargets();
   let validLanguage = false;
   let validLibrary = false;
   for (let i in validTargets) {

@@ -28,15 +28,16 @@ const OpenAPISampler = require('openapi-sampler');
  * @param  {string} path              Key of the path
  * @param  {string} method            Key of the method
  * @param  {Object} queryParamValues  Optional: Values for the query parameters if present
+ * @param  {string} baseUrlParam           Optional: Base URL to prepend to the path
  * @return {array}                    List of HAR Request objects for the endpoint
  */
-const createHar = function (openApi, path, method, queryParamValues) {
+const createHar = function (openApi, path, method, queryParamValues, baseUrlParam) {
   // if the operational parameter is not provided, set it to empty object
   if (typeof queryParamValues === 'undefined') {
     queryParamValues = {};
   }
 
-  const baseUrl = getBaseUrl(openApi, path, method);
+  const baseUrl = baseUrlParam ? baseUrlParam : getBaseUrl(openApi, path, method);
 
   const baseHar = {
     method: method.toUpperCase(),
