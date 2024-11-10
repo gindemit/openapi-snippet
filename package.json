@@ -17,17 +17,18 @@
   "main": "index.js",
   "scripts": {
     "test": "node test/test.js | tap-spec",
-    "build": "mkdir -p dist && browserify -g uglifyify ./index.js > ./dist/openapisnippet.min.js"
+    "build": "rimraf dist && mkdir dist && browserify -g uglifyify ./index.js > ./dist/openapisnippet.min.js"
   },
   "dependencies": {
-    "httpsnippet": "^2.0.0",
-    "openapi-sampler": "^1.0.0-beta.14"
+    "httpsnippet": "^3.0.9",
+    "openapi-sampler": "^1.5.1"
   },
   "devDependencies": {
-    "browserify": "^16.2.3",
-    "prettier": "2.3.0",
+    "browserify": "^17.0.1",
+    "prettier": "3.3.3",
+    "rimraf": "^6.0.1",
     "tap-spec": "^5.0.0",
-    "tape": "^4.10.1",
+    "tape": "^5.9.0",
     "uglifyify": "^5.0.2"
   }
 }
