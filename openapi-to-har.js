@@ -27,11 +27,11 @@ const OpenAPISampler = require('openapi-sampler');
  * @param  {Object} openApi           OpenAPI document
  * @param  {string} path              Key of the path
  * @param  {string} method            Key of the method
- * @param  {Object} queryParamValues  Optional: Values for the query parameters if present
- * @param  {string} baseUrlParam           Optional: Base URL to prepend to the path
+ * @param  {Object} values            Optional: Values for the parameters if present
+ * @param  {string} baseUrlParam      Optional: Base URL to prepend to the path
  * @return {array}                    List of HAR Request objects for the endpoint
  */
-const createHar = function (openApi, path, method, queryParamValues, baseUrlParam) {
+const createHar = function (openApi, path, method, values, baseUrlParam) {
   // if the operational parameter is not provided, set it to empty object
   if (typeof queryParamValues === 'undefined') {
     queryParamValues = {};
@@ -42,8 +42,8 @@ const createHar = function (openApi, path, method, queryParamValues, baseUrlPara
   const baseHar = {
     method: method.toUpperCase(),
     url: baseUrl + getFullPath(openApi, path, method),
-    headers: getHeadersArray(openApi, path, method),
-    queryString: getQueryStrings(openApi, path, method, queryParamValues),
+    headers: getHeadersArray(openApi, path, method, values.headers || {}),
+    queryString: getQueryStrings(openApi, path, method, values.queryParameters || {}),
     httpVersion: 'HTTP/1.1',
     cookies: getCookies(openApi, path, method),
     headersSize: 0,
@@ -646,9 +646,10 @@ const getCookies = function (openApi, path, method) {
  * @param  {Object} openApi OpenAPI document
  * @param  {string} path    Key of the path
  * @param  {string} method  Key of the method
+ * @param  {Object} headerValues Optional: header values to use in the snippet if present
  * @return {HarParameterObject[]} List of objects describing the header
  */
-const getHeadersArray = function (openApi, path, method) {
+const getHeadersArray = function (openApi, path, method, headerValues) {
   const headers = [];
   const pathObj = openApi.paths[path][method];
 
@@ -746,19 +747,25 @@ const getHeadersArray = function (openApi, path, method) {
   }
 
   if (basicAuthDef) {
+    const token = headerValues['basic'];
+    const value = token ? token : 'REPLACE_BASIC_AUTH';
     headers.push({
       name: 'Authorization',
-      value: 'Basic ' + 'REPLACE_BASIC_AUTH',
+      value: 'Basic ' + value,
     });
   } else if (apiKeyAuthDef) {
+    const apiKey = headerValues[apiKeyAuthDef.name];
+    const value = apiKey ? apiKey : 'REPLACE_KEY_VALUE';
     headers.push({
       name: apiKeyAuthDef.name,
-      value: 'REPLACE_KEY_VALUE',
+      value: value,
     });
   } else if (oauthDef) {
+    const token = headerValues['bearer'];
+    const value = token ? token : 'REPLACE_BEARER_TOKEN';
     headers.push({
       name: 'Authorization',
-      value: 'Bearer ' + 'REPLACE_BEARER_TOKEN',
+      value: 'Bearer ' + value,
     });
   }
 

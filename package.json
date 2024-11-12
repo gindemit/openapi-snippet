@@ -17,7 +17,8 @@
   "main": "index.js",
   "scripts": {
     "test": "node test/test.js | tap-spec",
-    "build": "rimraf dist && mkdir dist && browserify -g uglifyify ./index.js > ./dist/openapisnippet.min.js"
+    "build": "rimraf dist && mkdir dist && browserify -g uglifyify ./index.js > ./dist/openapisnippet.min.js",
+    "build:webpack": "rimraf dist && webpack --config webpack.config.js"
   },
   "dependencies": {
     "httpsnippet": "^3.0.9",
@@ -25,10 +26,18 @@
   },
   "devDependencies": {
     "browserify": "^17.0.1",
+    "https-browserify": "^1.0.0",
+    "path-browserify": "^1.0.1",
     "prettier": "3.3.3",
+    "process": "^0.11.10",
     "rimraf": "^6.0.1",
+    "stream-browserify": "^3.0.0",
+    "stream-http": "^3.2.0",
     "tap-spec": "^5.0.0",
     "tape": "^5.9.0",
-    "uglifyify": "^5.0.2"
+    "terser-webpack-plugin": "^5.3.10",
+    "uglifyify": "^5.0.2",
+    "webpack": "^5.96.1",
+    "webpack-cli": "^5.1.4"
   }
 }
