@@ -18,6 +18,7 @@
   "scripts": {
     "test": "node test/test.js | tap-spec",
     "build": "rimraf dist && mkdir dist && browserify -g uglifyify ./index.js > ./dist/openapisnippet.min.js",
+    "build:debug": "rimraf dist && mkdir dist && browserify --debug --ignore-missing ./index.js > ./dist/openapisnippet.min.js",
     "build:webpack": "rimraf dist && webpack --config webpack.config.js"
   },
   "dependencies": {
