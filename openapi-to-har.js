@@ -29,9 +29,10 @@ const OpenAPISampler = require('openapi-sampler');
  * @param  {string} method            Key of the method
  * @param  {Object} values            Optional: Values for the parameters if present
  * @param  {string} baseUrlParam      Optional: Base URL to prepend to the path
+ * @param  {boolean} readablePayload  Optional: Whether to format the payload in a readable way
  * @return {array}                    List of HAR Request objects for the endpoint
  */
-const createHar = function (openApi, path, method, values, baseUrlParam) {
+const createHar = function (openApi, path, method, values, baseUrlParam, readablePayload) {
   // if the operational parameter is not provided, set it to empty object
   if (typeof queryParamValues === 'undefined') {
     queryParamValues = {};
@@ -53,7 +54,7 @@ const createHar = function (openApi, path, method, values, baseUrlParam) {
   let hars = [];
 
   // get payload data, if available:
-  const postDatas = getPayloads(openApi, path, method);
+  const postDatas = getPayloads(openApi, path, method, readablePayload);
 
   // For each postData create a snippet
   if (postDatas.length > 0) {
@@ -298,9 +299,10 @@ const createHarParameterObjects = function (
  * @param  {object} openApi
  * @param  {string} path
  * @param  {string} method
+ * @param  {boolean} readablePayload
  * @return {array}  A list of payload objects
  */
-const getPayloads = function (openApi, path, method) {
+const getPayloads = function (openApi, path, method, readablePayload) {
   if (typeof openApi.paths[path][method].parameters !== 'undefined') {
     for (let i in openApi.paths[path][method].parameters) {
       const param = openApi.paths[path][method].parameters[i];
@@ -315,10 +317,11 @@ const getPayloads = function (openApi, path, method) {
             { skipReadOnly: true },
             openApi
           );
+          text = readablePayload ? '\n' + JSON.stringify(sample, null, 2) : JSON.stringify(sample);
           return [
             {
               mimeType: 'application/json',
-              text: JSON.stringify(sample),
+              text: text,
             },
           ];
         } catch (err) {
@@ -357,9 +360,10 @@ const getPayloads = function (openApi, path, method) {
           openApi
         );
         if (type === 'application/json') {
+          const text = readablePayload ? '\n' + JSON.stringify(sample, null, 2) : JSON.stringify(sample);
           payloads.push({
             mimeType: type,
-            text: JSON.stringify(sample),
+            text: text,
           });
         } else if (type === 'multipart/form-data') {
           if (sample !== undefined) {
@@ -367,7 +371,7 @@ const getPayloads = function (openApi, path, method) {
             Object.keys(sample).forEach((key) => {
               let value = sample[key];
               if (typeof sample[key] !== 'string') {
-                value = JSON.stringify(sample[key]);
+                value = readablePayload ? '\n' + JSON.stringify(sample[key], null, 2) : JSON.stringify(sample[key]);
               }
               params.push({ name: key, value: value });
             });
