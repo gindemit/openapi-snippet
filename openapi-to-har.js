@@ -54,7 +54,7 @@ const createHar = function (openApi, path, method, values, baseUrlParam, readabl
   let hars = [];
 
   // get payload data, if available:
-  const postDatas = getPayloads(openApi, path, method, readablePayload);
+  const postDatas = getPayloads(openApi, path, method, readablePayload, values.payloads || {});
 
   // For each postData create a snippet
   if (postDatas.length > 0) {
@@ -300,12 +300,14 @@ const createHarParameterObjects = function (
  * @param  {string} path
  * @param  {string} method
  * @param  {boolean} readablePayload
+ * @param  {object} payloadValues
  * @return {array}  A list of payload objects
  */
-const getPayloads = function (openApi, path, method, readablePayload) {
+const getPayloads = function (openApi, path, method, readablePayload, payloadValues) {
   if (typeof openApi.paths[path][method].parameters !== 'undefined') {
-    for (let i in openApi.paths[path][method].parameters) {
-      const param = openApi.paths[path][method].parameters[i];
+    const parameters = openApi.paths[path][method].parameters;
+    for (let i in parameters) {
+      const param = parameters[i];
       if (
         typeof param.in !== 'undefined' &&
         param.in.toLowerCase() === 'body' &&
@@ -359,6 +361,7 @@ const getPayloads = function (openApi, path, method, readablePayload) {
           { skipReadOnly: true },
           openApi
         );
+        applyValues(sample, payloadValues);
         if (type === 'application/json') {
           const text = readablePayload ? '\n' + JSON.stringify(sample, null, 2) : JSON.stringify(sample);
           payloads.push({
@@ -404,6 +407,23 @@ const getPayloads = function (openApi, path, method, readablePayload) {
   }
   return payloads;
 };
+
+/**
+ * Applies the values in the given object to the sample object.
+ * @param {Object} sample - The sample object to apply values to
+ * @param {Object} values - The values to apply to the sample object
+ * @return {void}
+ */
+const applyValues = function (sample, values) {
+  if (!sample || !values) {
+    return;
+  }
+  Object.keys(values).forEach((key) => {
+    if (sample[key]) {
+      sample[key] = values[key];
+    }
+  });
+}
 
 /**
  * Gets the base URL constructed from the given openApi.
