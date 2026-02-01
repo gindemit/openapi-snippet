@@ -664,7 +664,6 @@ const getCookies = function (openApi, path, method) {
 const getHeadersArray = function (openApi, path, method, headerValues) {
   const headers = [];
   const pathObj = openApi.paths[path][method];
-
   // 'accept' header:
   const produces = pathObj.produces || openApi.produces;
   if (produces) {
