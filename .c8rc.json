@@ -1,0 +1,11 @@
+{
+  "all": true,
+  "include": ["index.js", "openapi-to-har.js"],
+  "reporter": ["text", "lcov", "json-summary"],
+  "check-coverage": true,
+  "per-file": true,
+  "lines": 90,
+  "statements": 90,
+  "functions": 95,
+  "branches": 80
+}

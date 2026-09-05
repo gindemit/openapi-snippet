@@ -13,9 +13,6 @@ module.exports = {
     minimize: true,
     minimizer: [new TerserPlugin()], // Use Terser for minification
   },
-  externals: {
-    'mime-db': 'commonjs mime-db', // Exclude mime-db from the bundle
-  },
   resolve: {
     fallback: {
       "stream": require.resolve("stream-browserify"),
@@ -29,9 +26,6 @@ module.exports = {
   plugins: [
     new webpack.ProvidePlugin({
       process: 'process/browser', // Provide process globally
-    }),
-    new webpack.DefinePlugin({
-      require: 'undefined' // Define `require` as undefined
     })
   ],
 };

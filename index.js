@@ -50,7 +50,7 @@ const getEndpointSnippets = function (openApi, path, method, targets, values, ba
     method: hars[0].method,
     url: hars[0].url,
     description: hars[0].description,
-    resource: getResourceName(hars[0].url),
+    resource: getResourceName(path),
     snippets: snippets,
   };
 };
@@ -107,7 +107,9 @@ const getSnippets = function (openApi, targets) {
  */
 const getMethodOrder = function (a, b) {
   const order = ['get', 'post', 'put', 'delete', 'patch'];
-  if (order.indexOf(a) === -1) {
+  if (order.indexOf(a) === -1 && order.indexOf(b) === -1) {
+    return 0;
+  } else if (order.indexOf(a) === -1) {
     return 1;
   } else if (order.indexOf(b) === -1) {
     return -1;

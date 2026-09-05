@@ -33,18 +33,19 @@ const OpenAPISampler = require('openapi-sampler');
  * @return {array}                    List of HAR Request objects for the endpoint
  */
 const createHar = function (openApi, path, method, values, baseUrlParam, readablePayload) {
-  // if the operational parameter is not provided, set it to empty object
-  if (typeof queryParamValues === 'undefined') {
-    queryParamValues = {};
+  if (!openApi || !openApi.paths || !openApi.paths[path] || !openApi.paths[path][method]) {
+    throw new Error('Unknown endpoint: ' + method + ' ' + path);
   }
+  values = values || {};
 
   const baseUrl = baseUrlParam ? baseUrlParam : getBaseUrl(openApi, path, method);
 
   const baseHar = {
     method: method.toUpperCase(),
-    url: baseUrl + getFullPath(openApi, path, method),
+    url: baseUrl.replace(/\/$/, '') + getFullPath(openApi, path, method, values.pathParameters),
+    description: openApi.paths[path][method].description || 'No description available',
     headers: getHeadersArray(openApi, path, method, values.headers || {}),
-    queryString: getQueryStrings(openApi, path, method, values.queryParameters || {}),
+    queryString: getQueryStrings(openApi, path, method, values.queryParameters || values),
     httpVersion: 'HTTP/1.1',
     cookies: getCookies(openApi, path, method),
     headersSize: 0,
@@ -230,7 +231,7 @@ const createHarParameterObjects = function (
 
   const objects = [];
   style = style ? style : getDefaultStyleForLocation(location);
-  explode = explode ? explode : getDefaultExplodeForStyle(style);
+  explode = explode === undefined ? getDefaultExplodeForStyle(style) : explode;
 
   if (location === 'query' || location === 'cookie') {
     const separator = getArrayElementSeparator(style);
@@ -313,48 +314,36 @@ const getPayloads = function (openApi, path, method, readablePayload, payloadVal
         param.in.toLowerCase() === 'body' &&
         typeof param.schema !== 'undefined'
       ) {
-        try {
           const sample = OpenAPISampler.sample(
             param.schema,
             { skipReadOnly: true },
             openApi
           );
-          text = readablePayload ? '\n' + JSON.stringify(sample, null, 2) : JSON.stringify(sample);
+          applyValues(sample, payloadValues);
+          const text = readablePayload ? '\n' + JSON.stringify(sample, null, 2) : JSON.stringify(sample);
           return [
             {
               mimeType: 'application/json',
               text: text,
             },
           ];
-        } catch (err) {
-          console.log(err);
-          return null;
-        }
       }
     }
   }
 
-  if (
-    openApi.paths[path][method].requestBody &&
-    openApi.paths[path][method].requestBody['$ref']
-  ) {
-    openApi.paths[path][method].requestBody = resolveRef(
-      openApi,
-      openApi.paths[path][method].requestBody['$ref']
-    );
-  }
+  let requestBody = openApi.paths[path][method].requestBody;
+  if (requestBody && requestBody.$ref) requestBody = resolveRef(openApi, requestBody.$ref);
 
   const payloads = [];
   if (
-    openApi.paths[path][method].requestBody &&
-    openApi.paths[path][method].requestBody.content
+    requestBody && requestBody.content
   ) {
     [
       'application/json',
       'application/x-www-form-urlencoded',
       'multipart/form-data',
     ].forEach((type) => {
-      const content = openApi.paths[path][method].requestBody.content[type];
+      const content = requestBody.content[type];
       if (content && content.schema) {
         const sample = OpenAPISampler.sample(
           content.schema,
@@ -397,8 +386,8 @@ const getPayloads = function (openApi, path, method, readablePayload, payloadVal
           payloads.push({
             mimeType: 'application/x-www-form-urlencoded',
             params: params,
-            text: Object.keys(params)
-              .map((key) => key + '=' + sample[key])
+            text: params
+              .map(({ name, value }) => name + '=' + value)
               .join('&'),
           });
         }
@@ -419,7 +408,7 @@ const applyValues = function (sample, values) {
     return;
   }
   Object.keys(values).forEach((key) => {
-    if (sample[key]) {
+    if (Object.prototype.hasOwnProperty.call(sample, key)) {
       sample[key] = values[key];
     }
   });
@@ -432,22 +421,22 @@ const applyValues = function (sample, values) {
  * @return {string}         Base URL
  */
 const getBaseUrl = function (openApi, path, method) {
-  if (openApi.paths[path][method].servers)
+  if (openApi.paths[path][method].servers && openApi.paths[path][method].servers.length)
     return openApi.paths[path][method].servers[0].url;
-  if (openApi.paths[path].servers) return openApi.paths[path].servers[0].url;
-  if (openApi.servers) return openApi.servers[0].url;
+  if (openApi.paths[path].servers && openApi.paths[path].servers.length) return openApi.paths[path].servers[0].url;
+  if (openApi.servers && openApi.servers.length) return openApi.servers[0].url;
 
   let baseUrl = '';
-  if (typeof openApi.schemes !== 'undefined') {
+  if (openApi.schemes && openApi.schemes.length) {
     baseUrl += openApi.schemes[0];
   } else {
     baseUrl += 'http';
   }
 
   if (openApi.basePath === '/') {
-    baseUrl += '://' + openApi.host;
+    baseUrl += '://' + (openApi.host || 'localhost');
   } else {
-    baseUrl += '://' + openApi.host + openApi.basePath;
+    baseUrl += '://' + (openApi.host || 'localhost') + (openApi.basePath || '');
   }
 
   return baseUrl;
@@ -463,17 +452,17 @@ const getBaseUrl = function (openApi, path, method) {
  */
 const getParameterValues = function (openApi, param, location, values) {
   let value =
-    'SOME_' + (param.type || param.schema.type).toUpperCase() + '_VALUE';
+    'SOME_' + (param.type || (param.schema && param.schema.type) || 'string').toUpperCase() + '_VALUE';
   if (location === 'path') {
     // then default to the original place holder value (e.b. '{id}')
     value = `{${param.name}}`;
   }
 
-  if (values && typeof values[param.name] !== 'undefined') {
+  if (values && Object.prototype.hasOwnProperty.call(values, param.name) && typeof values[param.name] !== 'undefined') {
     value = values[param.name];
   } else if (typeof param.example !== 'undefined') {
     value = param.example;
-  } else if (typeof param.examples !== 'undefined') {
+  } else if (param.examples && Object.keys(param.examples).length) {
     let firstExample = Object.values(param.examples)[0];
     if (
       typeof firstExample['$ref'] === 'string' &&
@@ -489,6 +478,8 @@ const getParameterValues = function (openApi, param, location, values) {
     value = param.schema.example;
   } else if (typeof param.default !== 'undefined') {
     value = param.default;
+  } else if (param.schema && param.schema.default !== undefined) {
+    value = param.schema.default;
   }
 
   return createHarParameterObjects(param, value);
@@ -512,7 +503,7 @@ const parseParametersToQuery = function (
   values
 ) {
   /** @type {Object.<string, HarParameterObject[]>} */
-  const queryStrings = {};
+  const queryStrings = Object.create(null);
 
   for (let i in parameters) {
     let param = parameters[i];
@@ -524,19 +515,14 @@ const parseParametersToQuery = function (
         typeof param.schema['$ref'] === 'string' &&
         /^#/.test(param.schema['$ref'])
       ) {
-        param.schema = resolveRef(openApi, param.schema['$ref']);
-        if (typeof param.schema.type === 'undefined') {
-          // many schemas don't have an explicit type
-          param.schema.type = 'object';
-        }
+        param = { ...param, schema: { type: 'object', ...resolveRef(openApi, param.schema['$ref']) } };
       }
     }
     if (
       typeof param.in !== 'undefined' &&
       param.in.toLowerCase() === location
     ) {
-      // param.name is a safe key, because the spec defines
-      // that name MUST be unique
+      // A null-prototype dictionary preserves every valid parameter name.
       queryStrings[param.name] = getParameterValues(
         openApi,
         param,
@@ -576,10 +562,10 @@ const getParameterCollectionIn = function (
   }
 
   /** @type {Object.<string, HarParameterObject[]>} */
-  let pathParameters = {};
+  let pathParameters = Object.create(null);
 
   /** @type {Object.<string, HarParameterObject[]>} */
-  let operationParameters = {};
+  let operationParameters = Object.create(null);
 
   // First get any parameters from the path
   if (typeof openApi.paths[path].parameters !== 'undefined') {
@@ -636,20 +622,22 @@ const getQueryStrings = function (openApi, path, method, values) {
  * @param  {string} method  Key of the method
  * @return {string}         Full path including example values
  */
-const getFullPath = function (openApi, path, method) {
+const getFullPath = function (openApi, path, method, values) {
   let fullPath = path;
 
   const pathParameters = getParameterCollectionIn(
     openApi,
     path,
     method,
-    'path'
+    'path',
+    values
   );
   pathParameters.forEach(({ name, value }) => {
-    fullPath = fullPath.replace('{' + name + '}', value);
+    const encoded = encodeURIComponent(value).replace(/%2C/gi, ',').replace(/%3B/gi, ';').replace(/%3D/gi, '=');
+    fullPath = fullPath.split('{' + name + '}').join(encoded);
   });
 
-  return fullPath;
+  return fullPath.replace(/\{/g, '%7B').replace(/\}/g, '%7D');
 };
 
 /**
@@ -678,9 +666,10 @@ const getHeadersArray = function (openApi, path, method, headerValues) {
   const pathObj = openApi.paths[path][method];
 
   // 'accept' header:
-  if (typeof pathObj.consumes !== 'undefined') {
-    for (let i in pathObj.consumes) {
-      const type = pathObj.consumes[i];
+  const produces = pathObj.produces || openApi.produces;
+  if (produces) {
+    for (let i in produces) {
+      const type = produces[i];
       headers.push({
         name: 'accept',
         value: type,
@@ -689,11 +678,12 @@ const getHeadersArray = function (openApi, path, method, headerValues) {
   }
 
   // headers defined in path object:
-  headers.push(...getParameterCollectionIn(openApi, path, method, 'header'));
+  headers.push(...getParameterCollectionIn(openApi, path, method, 'header', headerValues));
 
-  if (typeof pathObj.security !== 'undefined') {
-    for (var l in pathObj.security) {
-      const lKeys = Object.keys(pathObj.security[l]);
+  const security = pathObj.security === undefined ? openApi.security : pathObj.security;
+  if (security) {
+    for (var l in security) {
+      const lKeys = Object.keys(security[l]);
       for (const secScheme of lKeys) {
         // security:
         let basicAuthDef;
@@ -701,7 +691,8 @@ const getHeadersArray = function (openApi, path, method, headerValues) {
         let oauthDef;
         const secDefinition = openApi.securityDefinitions
           ? openApi.securityDefinitions[secScheme]
-          : openApi.components.securitySchemes[secScheme];
+          : openApi.components && openApi.components.securitySchemes && openApi.components.securitySchemes[secScheme];
+        if (!secDefinition) throw new Error('Unknown security scheme: ' + secScheme);
         const authType = secDefinition.type.toLowerCase();
         let authScheme = null;
 
@@ -735,45 +726,6 @@ const getHeadersArray = function (openApi, path, method, headerValues) {
         addHeaderIfNeeded(basicAuthDef, headerValues, headers, apiKeyAuthDef, oauthDef);
       }
     }
-  } else if (typeof openApi.security !== 'undefined') {
-    // Need to check OAS 3.0 spec about type http and scheme
-    for (let m in openApi.security) {
-      const mKeys = Object.keys(openApi.security[m]);
-      for (const secScheme of mKeys) {
-        const secDefinition = openApi.components.securitySchemes[secScheme];
-        const authType = secDefinition.type.toLowerCase();
-        let authScheme = null;
-
-        if (authType !== 'apikey' && authType !== 'oauth2') {
-          authScheme = secDefinition.scheme.toLowerCase();
-        }
-
-        switch (authType) {
-          case 'http':
-            switch (authScheme) {
-              case 'bearer':
-                oauthDef = secScheme;
-                break;
-              case 'basic':
-                basicAuthDef = secScheme;
-                break;
-            }
-            break;
-          case 'basic':
-            basicAuthDef = secScheme;
-            break;
-          case 'apikey':
-            if (secDefinition.in === 'header') {
-              apiKeyAuthDef = secDefinition;
-            }
-            break;
-          case 'oauth2':
-            oauthDef = secScheme;
-            break;
-        }
-        addHeaderIfNeeded(basicAuthDef, headerValues, headers, apiKeyAuthDef, oauthDef);
-      }
-    }
   }
   return headers;
 };
@@ -781,21 +733,22 @@ const getHeadersArray = function (openApi, path, method, headerValues) {
 function addHeaderIfNeeded(basicAuthDef, headerValues, headers, apiKeyAuthDef, oauthDef) {
   if (basicAuthDef) {
     const token = headerValues['basic'];
-    const value = token ? token : 'REPLACE_BASIC_AUTH';
+    const value = token === undefined ? 'REPLACE_BASIC_AUTH' : token;
     headers.push({
       name: 'Authorization',
       value: 'Basic ' + value,
     });
   } else if (apiKeyAuthDef) {
-    const apiKey = headerValues[apiKeyAuthDef.name];
-    const value = apiKey ? apiKey : 'REPLACE_KEY_VALUE';
+    const apiKey = Object.prototype.hasOwnProperty.call(headerValues, apiKeyAuthDef.name)
+      ? headerValues[apiKeyAuthDef.name] : undefined;
+    const value = apiKey === undefined ? 'REPLACE_KEY_VALUE' : apiKey;
     headers.push({
       name: apiKeyAuthDef.name,
       value: value,
     });
   } else if (oauthDef) {
     const token = headerValues['bearer'];
-    const value = token ? token : 'REPLACE_BEARER_TOKEN';
+    const value = token === undefined ? 'REPLACE_BEARER_TOKEN' : token;
     headers.push({
       name: 'Authorization',
       value: 'Bearer ' + value,
@@ -810,11 +763,11 @@ function addHeaderIfNeeded(basicAuthDef, headerValues, headers, apiKeyAuthDef, o
  * @param  {Function} callback
  */
 const openApiToHarList = function (openApi) {
-  try {
     // iterate openApi and create har objects:
     const harList = [];
     for (let path in openApi.paths) {
       for (let method in openApi.paths[path]) {
+        if (!['get', 'post', 'put', 'delete', 'patch', 'options', 'head', 'trace'].includes(method)) continue;
         const url = getBaseUrl(openApi, path, method) + path;
         const hars = createHar(openApi, path, method);
         // need to push multiple here
@@ -830,9 +783,6 @@ const openApiToHarList = function (openApi) {
     }
 
     return harList;
-  } catch (e) {
-    console.log(e);
-  }
 };
 
 /**
@@ -843,20 +793,14 @@ const openApiToHarList = function (openApi) {
  * @return {any}
  */
 const resolveRef = function (openApi, ref) {
-  const parts = ref.split('/');
-
-  if (parts.length <= 1) return {}; // = 3
-
-  const recursive = function (obj, index) {
-    if (index + 1 < parts.length) {
-      // index = 1
-      let newCount = index + 1;
-      return recursive(obj[parts[index]], newCount);
-    } else {
-      return obj[parts[index]];
-    }
-  };
-  return recursive(openApi, 1);
+  if (!ref.startsWith('#/')) throw new Error('Unsupported reference: ' + ref);
+  const parts = decodeURIComponent(ref.slice(2)).split('/').map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
+  let value = openApi;
+  for (const part of parts) {
+    if (!value || !Object.prototype.hasOwnProperty.call(value, part)) throw new Error('Unresolved reference: ' + ref);
+    value = value[part];
+  }
+  return value;
 };
 
 module.exports = {
