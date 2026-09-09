@@ -3,6 +3,48 @@
 const test = require('tape');
 const har = require('../openapi-to-har');
 const snippets = require('../index');
+const {randomBytes} = require('../crypto-browser');
+
+test('browser crypto adapter returns secure byte buffers without a fallback', t => {
+  const bytes = randomBytes(32);
+  t.equal(Buffer.isBuffer(bytes), true);
+  t.equal(bytes.length, 32);
+  t.ok(bytes.some(byte => byte !== 0));
+  t.end();
+});
+
+test('response samples support OAS 3 media types and Swagger 2 schemas', t => {
+  const oas = {
+    openapi: '3.0.3',
+    paths: {'/pets': {get: {responses: {'200': {content: {
+      'text/plain': {schema: {type: 'string', example: 'fallback'}},
+      'application/json': {schema: {type: 'object', properties: {
+        id: {type: 'integer', example: 7},
+        label: {type: 'string', readOnly: true, example: 'visible'},
+      }}},
+    }}}}}},
+  };
+  t.deepEqual(snippets.getResponseSample(oas, '/pets', 'GET', '200'), {id: 7, label: 'visible'});
+
+  const swagger = {swagger: '2.0', paths: {'/pets': {get: {responses: {
+    200: {schema: {type: 'array', items: {type: 'string', example: 'pet'}}},
+  }}}}};
+  t.deepEqual(snippets.getResponseSample(swagger, '/pets', 'get', 200), ['pet']);
+  t.end();
+});
+
+test('response sampling falls back safely for missing and invalid schemas', t => {
+  const fallback = {openapi: '3.0.3', paths: {'/pets': {get: {responses: {
+    default: {content: {'application/problem+json': {schema: {type: 'string', example: 'problem'}}}},
+  }}}}};
+  t.equal(snippets.getResponseSample(fallback, '/pets', 'get', 'default'), 'problem');
+  t.equal(snippets.getResponseSample(fallback, '/missing', 'get', 'default'), null);
+  t.equal(snippets.getResponseSample(fallback, '/pets', 'post', 'default'), null);
+  t.equal(snippets.getResponseSample(fallback, '/pets', 'get', '404'), null);
+  t.equal(snippets.getResponseSample(null, '/pets', 'get', '200'), null);
+  t.equal(snippets.httpStatusCodes[404], 'Not Found');
+  t.end();
+});
 
 function document(operation = {}, parameters = []) {
   return { openapi: '3.0.3', servers: [{ url: 'https://example.com' }], paths: { '/pets/{id}': { parameters, get: { description: 'Find pets', ...operation } } } };

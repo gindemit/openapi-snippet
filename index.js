@@ -10,6 +10,8 @@
 
 const OpenAPIToHar = require('./openapi-to-har.js');
 const {HTTPSnippet, availableTargets} = require('httpsnippet');
+const OpenAPISampler = require('openapi-sampler');
+const httpStatusCodes = require('builtin-status-codes');
 
 /**
  * Return snippets for endpoint identified using path and method in the given
@@ -216,9 +218,40 @@ const capitalizeFirstLetter = function (string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 };
 
+/**
+ * Generate a sample response for an endpoint and status code.
+ *
+ * @return {object|null} Sampled response, or null when no usable schema exists.
+ */
+const getResponseSample = function (openApi, path, method, statusCode) {
+  try {
+    const pathItem = openApi.paths && openApi.paths[path];
+    const operation = pathItem && pathItem[String(method).toLowerCase()];
+    const response = operation && operation.responses && operation.responses[statusCode];
+
+    if (!response) return null;
+
+    let schema;
+    if (response.content) {
+      const mediaTypes = Object.keys(response.content);
+      const mediaType = response.content['application/json'] || response.content[mediaTypes[0]];
+      schema = mediaType && mediaType.schema;
+    } else {
+      schema = response.schema;
+    }
+
+    if (!schema) return null;
+    return OpenAPISampler.sample(schema, {skipReadOnly: false}, openApi);
+  } catch (_error) {
+    return null;
+  }
+};
+
 module.exports = {
   getSnippets,
   getEndpointSnippets,
+  getResponseSample,
+  httpStatusCodes,
 };
 
 // The if is only for when this is run from the browser
@@ -231,8 +264,11 @@ if (typeof window !== 'undefined') {
   OpenAPISnippets = {
     getSnippets,
     getEndpointSnippets,
+    getResponseSample,
+    httpStatusCodes,
   };
 
   // replace/create the global namespace
   window.OpenAPISnippets = OpenAPISnippets;
+  window.OpenAPISampler = OpenAPISampler;
 }

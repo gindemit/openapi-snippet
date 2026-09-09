@@ -20,11 +20,17 @@ module.exports = {
       "http": require.resolve("stream-http"),
       "https": require.resolve("https-browserify"),
       "fs": false, // If 'fs' is not required in the browser, set to false to exclude it
-      "process": require.resolve("process/browser") // Add process polyfill
+      "process": require.resolve("process/browser"), // Add process polyfill
+      "buffer": require.resolve("buffer/"),
+      "crypto": path.resolve(__dirname, "crypto-browser.js"),
+      "querystring": require.resolve("querystring-es3"),
+      "url": require.resolve("url/"),
+      "util": require.resolve("util/"),
     },
   },
   plugins: [
     new webpack.ProvidePlugin({
+      Buffer: ['buffer', 'Buffer'],
       process: 'process/browser', // Provide process globally
     })
   ],

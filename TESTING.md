@@ -21,7 +21,9 @@ unminified bundle with source maps. CI runs coverage and the production build.
 The suite covers request generation for Swagger/OpenAPI, URL and parameter
 serialization, explicit value precedence, payload overrides, reference
 immutability, credentials, output metadata, targets and error propagation.
-The published API generates request snippets; it has no response-sampling API.
+The browser bundle exposes request generation plus `getResponseSample`,
+`httpStatusCodes`, and `OpenAPISampler`. Built-bundle checks exercise these
+globals without Node's `require`.
 
 Endpoint values support the legacy flat query map or grouped `queryParameters`,
 `pathParameters`, `headers` and `payloads` maps. Path values are encoded for a
