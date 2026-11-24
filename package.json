@@ -26,7 +26,7 @@
   "dependencies": {
     "builtin-status-codes": "3.0.0",
     "httpsnippet": "^3.0.10",
-    "openapi-sampler": "^1.5.1"
+    "openapi-sampler": "git+https://github.com/gindemit/openapi-sampler.git#0f20b772fb2c39693820879f72c9bbd91c31f2f2"
   },
   "devDependencies": {
     "buffer": "^6.0.3",

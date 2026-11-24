@@ -782,13 +782,6 @@ const openApiToHarList = function (openApi) {
     return harList;
 };
 
-/**
- * Returns the value referenced in the given reference string
- *
- * @param  {object} openApi  OpenAPI document
- * @param  {string} ref      A reference string
- * @return {any}
- */
 module.exports = {
   getAll: openApiToHarList,
   getEndpoint: createHar,

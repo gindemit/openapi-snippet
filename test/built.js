@@ -18,6 +18,7 @@ assert.equal(typeof api.getEndpointSnippets, 'function');
 assert.equal(typeof api.getResponseSample, 'function');
 assert.equal(api.httpStatusCodes[200], 'OK');
 assert.equal(typeof context.window.OpenAPISampler.sample, 'function');
+assert.equal(context.window.OpenAPISampler.sample({type: 'integer', minimum: 1, multipleOf: 2}), 2);
 const spec = { openapi: '3.0.3', servers: [{ url: 'https://example.com' }], paths: { '/pets': { get: {} } } };
 const result = api.getEndpointSnippets(spec, '/pets', 'get', ['shell_curl']);
 assert.match(result.snippets[0].content, /https:\/\/example.com\/pets/);
