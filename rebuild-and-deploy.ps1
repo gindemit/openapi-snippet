@@ -1,36 +1,47 @@
-# Rebuild openapi-snippet and deploy to apidef-website
-# This script builds the minified library and copies it to the Angular app
+param(
+    [string]$TargetFile = (Join-Path $PSScriptRoot '../apidef-website/src/assets/openapisnippet.min.js')
+)
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = 'Stop'
+$targetPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($TargetFile)
+$sourcePath = Join-Path $PSScriptRoot 'dist/openapisnippet.min.js'
 
-Write-Host "Building openapi-snippet..." -ForegroundColor Cyan
+Push-Location $PSScriptRoot
+try {
+    $revision = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'Could not determine the snippet revision.' }
+    $changes = git status --porcelain
+    if ($LASTEXITCODE -ne 0) { throw 'Could not check the snippet working tree.' }
+    $lock = Get-Content -LiteralPath 'package-lock.json' -Raw | ConvertFrom-Json
+    $sampler = $lock.packages.'node_modules/openapi-sampler'
 
-# Build the webpack bundle
-npm run build:webpack
+    npm ci --no-audit --no-fund
+    if ($LASTEXITCODE -ne 0) { throw 'Installing locked dependencies failed.' }
+    npm run build
+    if ($LASTEXITCODE -ne 0) { throw 'The bundle build or browser smoke test failed.' }
 
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Build failed!" -ForegroundColor Red
-    exit 1
+    $digest = (Get-FileHash -LiteralPath $sourcePath -Algorithm SHA256).Hash.ToLowerInvariant()
+    $stagedPath = "$targetPath.$([guid]::NewGuid().ToString('N')).tmp"
+    try {
+        Copy-Item -LiteralPath $sourcePath -Destination $stagedPath
+        $copyDigest = (Get-FileHash -LiteralPath $stagedPath -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($copyDigest -ne $digest) { throw 'The bundle copy differs from the tested file.' }
+        if ([System.IO.File]::Exists($targetPath)) {
+            [System.IO.File]::Replace($stagedPath, $targetPath, $null)
+        } else {
+            [System.IO.File]::Move($stagedPath, $targetPath)
+        }
+    } finally {
+        if (Test-Path -LiteralPath $stagedPath) { Remove-Item -LiteralPath $stagedPath }
+    }
+
+    [ordered]@{
+        snippetRevision = $revision
+        sourceModified = [bool] $changes
+        samplerVersion = $sampler.version
+        samplerSource = $sampler.resolved
+        sha256 = $digest
+    } | ConvertTo-Json
+} finally {
+    Pop-Location
 }
-
-Write-Host "Build completed successfully" -ForegroundColor Green
-
-# Copy to apidef-website
-$sourceFile = "dist\openapisnippet.min.js"
-$targetFile = "..\apidef-website\src\assets\openapisnippet.min.js"
-
-Write-Host "Copying to apidef-website..." -ForegroundColor Cyan
-
-Copy-Item $sourceFile $targetFile -Force
-
-if (Test-Path $targetFile) {
-    $fileSize = (Get-Item $targetFile).Length / 1KB
-    Write-Host "Deployed successfully! File size: $([math]::Round($fileSize, 2)) KB" -ForegroundColor Green
-} else {
-    Write-Host "Copy failed!" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host ""
-Write-Host "Done! The library has been rebuilt and deployed." -ForegroundColor Green
-Write-Host "Restart your dev server to see the changes." -ForegroundColor Yellow

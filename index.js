@@ -11,6 +11,7 @@
 const OpenAPIToHar = require('./openapi-to-har.js');
 const {HTTPSnippet, availableTargets} = require('httpsnippet');
 const OpenAPISampler = require('openapi-sampler');
+const { getMediaSample, resolveReference } = require('./openapi-examples');
 const httpStatusCodes = require('builtin-status-codes');
 
 /**
@@ -221,27 +222,29 @@ const capitalizeFirstLetter = function (string) {
 /**
  * Generate a sample response for an endpoint and status code.
  *
- * @return {object|null} Sampled response, or null when no usable schema exists.
+ * @return {any} Sampled response, or null when no usable example or schema exists.
  */
 const getResponseSample = function (openApi, path, method, statusCode) {
   try {
     const pathItem = openApi.paths && openApi.paths[path];
     const operation = pathItem && pathItem[String(method).toLowerCase()];
-    const response = operation && operation.responses && operation.responses[statusCode];
+    const response = resolveReference(openApi, operation && operation.responses && operation.responses[statusCode]);
 
     if (!response) return null;
 
-    let schema;
+    let sample;
     if (response.content) {
       const mediaTypes = Object.keys(response.content);
       const mediaType = response.content['application/json'] || response.content[mediaTypes[0]];
-      schema = mediaType && mediaType.schema;
+      sample = getMediaSample(openApi, mediaType, {skipReadOnly: false});
     } else {
-      schema = response.schema;
+      const examples = response.examples || {};
+      const mediaType = Object.prototype.hasOwnProperty.call(examples, 'application/json')
+        ? 'application/json' : Object.keys(examples)[0];
+      sample = getMediaSample(openApi, { example: examples[mediaType], schema: response.schema }, {skipReadOnly: false});
     }
 
-    if (!schema) return null;
-    return OpenAPISampler.sample(schema, {skipReadOnly: false}, openApi);
+    return sample === undefined ? null : sample;
   } catch (_error) {
     return null;
   }

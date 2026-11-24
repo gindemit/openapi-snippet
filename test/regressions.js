@@ -51,6 +51,45 @@ function document(operation = {}, parameters = []) {
 }
 const parameter = (name, location, schema = { type: 'string' }) => ({ name, in: location, schema });
 
+test('media examples preserve falsy values and take precedence over schema samples', t => {
+  for (const example of [false, 0, '', null]) {
+    const media = { example, schema: { type: 'string' } };
+    const spec = document({
+      requestBody: { content: { 'application/json': media } },
+      responses: { 200: { content: { 'application/json': media } } },
+    });
+    const request = har.getEndpoint(spec, '/pets/{id}', 'get')[0];
+    t.equal(request.postData.text, JSON.stringify(example));
+    t.deepEqual(request.headers, [{ name: 'content-type', value: 'application/json' }]);
+    t.equal(snippets.getResponseSample(spec, '/pets/{id}', 'get', 200), example);
+  }
+  t.end();
+});
+
+test('request and response media share named example selection and local references', t => {
+  const media = { examples: {
+    external: { externalValue: 'https://example.invalid/later.json' },
+    named: { $ref: '#/components/examples/a~1b' },
+    other: { value: { id: 9 } },
+  } };
+  const spec = document({
+    requestBody: { content: { 'application/json': media } },
+    responses: { 200: { $ref: '#/components/responses/Example' } },
+  });
+  spec.components = {
+    examples: { 'a/b': { value: { id: 1 } } },
+    responses: { Example: { content: { 'application/json': media } } },
+  };
+  const request = har.getEndpoint(spec, '/pets/{id}', 'get', { payloads: { id: 2 } })[0];
+  t.equal(request.postData.text, '{"id":2}');
+  t.deepEqual(snippets.getResponseSample(spec, '/pets/{id}', 'get', 200), { id: 1 });
+  media.examples = { unresolved: { $ref: '#/components/examples/missing' } };
+  media.schema = { type: 'string', example: 'fallback' };
+  t.equal(har.getEndpoint(spec, '/pets/{id}', 'get')[0].postData.text, '"fallback"');
+  t.equal(snippets.getResponseSample(spec, '/pets/{id}', 'get', 200), 'fallback');
+  t.end();
+});
+
 test('HAR defaults and operation discovery skip path metadata', t => {
   const spec = document({}, [parameter('id', 'path')]);
   spec.paths['/pets/{id}'].summary = 'Pets';

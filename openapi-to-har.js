@@ -19,6 +19,7 @@
  * }
  */
 const OpenAPISampler = require('openapi-sampler');
+const { getMediaSample, resolveRef, resolveReference } = require('./openapi-examples');
 
 /**
  * Create HAR Request object for path and method pair described in given OpenAPI
@@ -331,8 +332,7 @@ const getPayloads = function (openApi, path, method, readablePayload, payloadVal
     }
   }
 
-  let requestBody = openApi.paths[path][method].requestBody;
-  if (requestBody && requestBody.$ref) requestBody = resolveRef(openApi, requestBody.$ref);
+  const requestBody = resolveReference(openApi, openApi.paths[path][method].requestBody);
 
   const payloads = [];
   if (
@@ -344,12 +344,10 @@ const getPayloads = function (openApi, path, method, readablePayload, payloadVal
       'multipart/form-data',
     ].forEach((type) => {
       const content = requestBody.content[type];
-      if (content && content.schema) {
-        const sample = OpenAPISampler.sample(
-          content.schema,
-          { skipReadOnly: true },
-          openApi
-        );
+      const mediaSample = getMediaSample(openApi, content, { skipReadOnly: true });
+      if (mediaSample !== undefined) {
+        const isObject = mediaSample !== null && typeof mediaSample === 'object';
+        const sample = Array.isArray(mediaSample) ? [...mediaSample] : isObject ? { ...mediaSample } : mediaSample;
         applyValues(sample, payloadValues);
         if (type === 'application/json') {
           const text = readablePayload ? '\n' + JSON.stringify(sample, null, 2) : JSON.stringify(sample);
@@ -358,7 +356,7 @@ const getPayloads = function (openApi, path, method, readablePayload, payloadVal
             text: text,
           });
         } else if (type === 'multipart/form-data') {
-          if (sample !== undefined) {
+          if (isObject) {
             const params = [];
             Object.keys(sample).forEach((key) => {
               let value = sample[key];
@@ -373,7 +371,7 @@ const getPayloads = function (openApi, path, method, readablePayload, payloadVal
             });
           }
         } else if (type == 'application/x-www-form-urlencoded') {
-          if (sample === undefined) return null;
+          if (!isObject) return;
 
           const params = [];
           Object.keys(sample).map((key) =>
@@ -791,17 +789,6 @@ const openApiToHarList = function (openApi) {
  * @param  {string} ref      A reference string
  * @return {any}
  */
-const resolveRef = function (openApi, ref) {
-  if (!ref.startsWith('#/')) throw new Error('Unsupported reference: ' + ref);
-  const parts = decodeURIComponent(ref.slice(2)).split('/').map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
-  let value = openApi;
-  for (const part of parts) {
-    if (!value || !Object.prototype.hasOwnProperty.call(value, part)) throw new Error('Unresolved reference: ' + ref);
-    value = value[part];
-  }
-  return value;
-};
-
 module.exports = {
   getAll: openApiToHarList,
   getEndpoint: createHar,
